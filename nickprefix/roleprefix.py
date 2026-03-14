@@ -18,15 +18,29 @@ class RolePrefix(commands.Cog):
             "stacking": False
         }
         self.config.register_guild(**default_guild)
-
+        self._prefix_cache = {}
+        self._member_locks = {}
         self._edit_timestamps = {}
 
     # ------------------------------------------------
     # Utility
     # ------------------------------------------------
+    def _has_correct_prefix(self, name: str, prefix: str):
+        if not prefix:
+            return False
+        return name.startswith(prefix + " ") or name == prefix
 
     def _clean_prefix(self, name: str):
-        return re.sub(r"^(\[[^\]]+\])+\s*", "", name).strip()
+        # remove [TAG] or (TAG) prefixes
+        name = re.sub(r"^((\[[^\]]+\])|(\([^)]+\)))+\s*", "", name)
+
+        # normalize whitespace
+        return re.sub(r"\s+", " ", name).strip()
+
+    def _get_lock(self, member_id: int):
+        if member_id not in self._member_locks:
+            self._member_locks[member_id] = asyncio.Lock()
+        return self._member_locks[member_id]
 
     async def _rate_limited(self, member: discord.Member):
         now = time.time()
@@ -55,41 +69,59 @@ class RolePrefix(commands.Cog):
             return ""
 
         if stacking:
-            return "".join(matches)
+            return " ".join(matches)
 
         return matches[0]
 
     async def _update_member(self, member: discord.Member):
+        lock = self._get_lock(member.id)
 
-        guild = member.guild
-        me = guild.me
+        async with lock:
+            guild = member.guild
+            me = guild.me
 
-        if not me.guild_permissions.manage_nicknames:
-            return
+            # Check permissions
+            if not me.guild_permissions.manage_nicknames:
+                return "missing_perm"
 
-        if member.top_role >= me.top_role:
-            return
+            # Check role hierarchy
+            if member.top_role >= me.top_role:
+                return "role_hierarchy"
 
-        if await self._rate_limited(member):
-            return
+            # Check rate limit
+            if await self._rate_limited(member):
+                return "rate_limited"
 
-        prefix = await self._get_prefix(member)
-
-        current = member.nick or member.name
-        base = self._clean_prefix(current)
-
-        new_name = f"{prefix} {base}".strip() if prefix else base
-
-        if new_name == current:
-            return
-
-        if len(new_name) > 32:
-            new_name = new_name[:32]
-
-        try:
-            await member.edit(nick=new_name, reason="Role prefix update")
-        except discord.HTTPException:
-            pass
+            # Get the appropriate prefix
+            prefix = await self._get_prefix(member)
+            cached = self._prefix_cache.get(member.id)
+            if cached == prefix:
+                return "no_change"
+            # Determine current nickname (or fallback to username)
+            current = member.nick or member.name
+            # If the current nickname already has the correct prefix, no update is needed
+            if prefix and self._has_correct_prefix(current, prefix):
+                return "no_change"
+            # Remove existing prefixes to get the base name
+            base = self._clean_prefix(current)
+            # Construct the new nickname with the prefix
+            new_name = f"{prefix} {base}".strip() if prefix else base
+            new_name = re.sub(r"\s+", " ", new_name)
+            # If the new nickname is the same as the current, no update is needed
+            if new_name == current:
+                return "no_change"
+            # Discord nickname limit is 32 characters
+            if len(new_name) > 32:
+                new_name = new_name[:32]
+            # Attempt to update the member's nickname
+            try:
+                await member.edit(nick=new_name, reason="Role prefix update")
+                self._prefix_cache[member.id] = prefix
+                return "success"
+            except discord.Forbidden:
+                return "role_hierarchy"
+            except discord.HTTPException:
+                return "http_error"
 
     # ------------------------------------------------
     # Events
@@ -101,7 +133,13 @@ class RolePrefix(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
+        # role change
         if before.roles != after.roles:
+            await self._update_member(after)
+            return
+
+        # nickname manually changed
+        if before.nick != after.nick:
             await self._update_member(after)
 
     # ------------------------------------------------
@@ -155,7 +193,7 @@ class RolePrefix(commands.Cog):
         for rid, prefix in data.items():
             role = ctx.guild.get_role(int(rid))
             if role:
-                lines.append(f"{role.name} → `{prefix}`")
+                lines.append(f" <@&{role.id}> [ {role.name} ] → `{prefix}`")
 
         await ctx.send("\n".join(lines))
 
@@ -172,8 +210,18 @@ class RolePrefix(commands.Cog):
     async def force(self, ctx, member: discord.Member):
         """Force update a member nickname."""
 
-        await self._update_member(member)
-        await ctx.send("Nickname updated.")
+        result = await self._update_member(member)
+
+        messages = {
+            "success": "✅ Nickname updated.",
+            "missing_perm": "❌ Bot is missing **Manage Nicknames** permission.",
+            "role_hierarchy": "❌ Cannot edit nickname — bot role is below this member.",
+            "rate_limited": "⚠️ Nickname update skipped due to rate limit protection.",
+            "http_error": "❌ Discord rejected the nickname update.",
+            "no_change": "ℹ️ Nickname already correct."
+        }
+
+        await ctx.send(messages.get(result, "Unknown result."))
 
     @nickprefix.command()
     async def repair(self, ctx):
@@ -181,8 +229,25 @@ class RolePrefix(commands.Cog):
 
         await ctx.send("Repairing nicknames...")
 
+        results = {
+            "success": 0,
+            "role_hierarchy": 0,
+            "missing_perm": 0,
+            "http_error": 0
+        }
+
         for member in ctx.guild.members:
-            await self._update_member(member)
+            result = await self._update_member(member)
+
+            if result in results:
+                results[result] += 1
+
             await asyncio.sleep(1)
 
-        await ctx.send("Repair complete.")
+        await ctx.send(
+            f"Repair complete.\n"
+            f"Updated: {results['success']}\n"
+            f"Hierarchy blocked: {results['role_hierarchy']}\n"
+            f"Permission errors: {results['missing_perm']}\n"
+            f"HTTP errors: {results['http_error']}"
+        )
