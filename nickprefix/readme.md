@@ -110,9 +110,9 @@ Useful when first installing the cog or after changing prefix rules.
 
 The cog automatically updates nicknames when:
 
-• A member joins the server
-• A member gains or loses roles
-• A nickname is manually edited
+- A member joins the server
+- A member gains or loses roles
+- A nickname is manually edited
 
 Nicknames are cleaned before applying prefixes to prevent duplicates or spacing issues.
 
@@ -130,10 +130,10 @@ Example transformations:
 
 To prevent Discord rate limits and nickname conflicts the cog includes:
 
-• Per-member update locks
-• Basic rate limiting
-• Role hierarchy validation
-• Permission checks
+- Per-member update locks
+- Basic rate limiting
+- Role hierarchy validation
+- Permission checks
 
 If the bot cannot edit a nickname, an error message will be returned when using commands like `force`.
 
@@ -141,9 +141,9 @@ If the bot cannot edit a nickname, an error message will be returned when using 
 
 # Requirements
 
-• Red-DiscordBot 3.x
-• Bot must have **Manage Nicknames** permission
-• Bot role must be **above members it edits**
+- Red-DiscordBot 3.x
+- Bot must have **Manage Nicknames** permission
+- Bot role must be **above members it edits**
 
 ---
 
