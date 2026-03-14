@@ -152,8 +152,8 @@ If the bot cannot edit a nickname, an error message will be returned when using 
 Example repository installation:
 
 ```
-[p]repo add myrepo https://github.com/itzdabbzz/dabz-cogs
-[p]cog install myrepo roleprefix
+[p]repo add myrepo https://github.com/ItzDabbzz/dabz-cogs
+[p]cog install dabz-cogs roleprefix
 [p]load roleprefix
 ```
 
