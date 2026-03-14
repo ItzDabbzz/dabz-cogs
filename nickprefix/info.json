@@ -1,0 +1,8 @@
+{
+  "name": "RolePrefix",
+  "short": "Automatic nickname prefixes from roles",
+  "description": "Automatically adds nickname prefixes based on configured roles.",
+  "author": ["ItzDabbzz"],
+  "version": "1.0.0",
+  "min_bot_version": "3.5.0"
+}
