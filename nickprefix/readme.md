@@ -17,13 +17,13 @@ When a member gains or loses a role, their nickname will automatically update to
 
 # Features
 
-• Automatic nickname prefixes based on roles
-• Optional prefix stacking
-• Rate-limit protection to avoid Discord API spam
-• Role hierarchy safety checks
-• Permission error reporting
-• Automatic cleanup of malformed nicknames
-• Mass repair command for existing members
+- Automatic nickname prefixes based on roles
+- Optional prefix stacking
+- Rate-limit protection to avoid Discord API spam
+- Role hierarchy safety checks
+- Permission error reporting
+- Automatic cleanup of malformed nicknames
+- Mass repair command for existing members
 
 The system also automatically normalizes spacing so nicknames like:
 
